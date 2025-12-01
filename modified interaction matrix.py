@@ -2,13 +2,15 @@ import numpy as np
 import pandas as pd
 import scipy as sp
 from numpy.lib.npyio import savetxt
-from scipy.sparse import csr_matrix, lil_matrix, coo_array
+from scipy.sparse import csr_matrix, lil_matrix, coo_array, coo_matrix
 from recpack.util import get_top_K_ranks
 from recpack.matrix import InteractionMatrix
 from recpack.scenarios import StrongGeneralization
 from metrics import calculate_ndcg, calculate_calibrated_recall
 from tqdm import tqdm
 import warnings
+
+from SVD import SVD
 
 # noinspection PyUnresolvedReferences
 def my_cosine_similarity(X: csr_matrix) -> csr_matrix:
@@ -238,12 +240,16 @@ ndcg2 = 0
 recall2 = 0
 ndcg3 = 0
 recall3 = 0
+ndcg4 = 0
+recall4 = 0
+ndcg5 = 0
+recall5 = 0
 iterations = 100
 for i in range(iterations):
 
-
-
     train, (val_fold_in, val_hold_out), (test_fold_in, test_hold_out), (train_users, val_users, test_users) = splitter.split(interaction_matrix_csr)
+
+
     scores = item_knn_scores(train, test_fold_in, 50)
     df_recos = scores2recommendations(scores, test_fold_in, 10)
 
@@ -304,6 +310,46 @@ for i in range(iterations):
     print(f"Recall@10: {recall:.5f}\n\n")
 
 
+    train, (val_fold_in, val_hold_out), (test_fold_in, test_hold_out), (train_users, val_users, test_users) = splitter.split(interaction_matrix_csr)
+
+    df_test_out = matrix2df(test_hold_out)
+
+    mf = SVD(pd.DataFrame(train.toarray()))
+
+    scores = csr_matrix(mf.get_scores(pd.DataFrame(test_fold_in.toarray())))
+
+    df_recos = scores2recommendations(scores, test_fold_in, 10)
+
+    ndcg = calculate_ndcg(df_recos, 10, df_test_out)
+    recall = calculate_calibrated_recall(df_recos, 10, df_test_out)
+    ndcg4 += ndcg
+    recall4 += recall
+
+    # print(df_recos.head(10))
+    print(f"  NDCG@10: {ndcg:.5f}")
+    print(f"Recall@10: {recall:.5f}")
+
+
+    train, (val_fold_in, val_hold_out), (test_fold_in, test_hold_out), (train_users, val_users, test_users) = splitter.split(modified_interaction_matrix_csr)
+
+    df_test_out = matrix2df(test_hold_out)
+
+    mf = SVD(pd.DataFrame(train.toarray()))
+
+    scores = csr_matrix(mf.get_scores(pd.DataFrame(test_fold_in.toarray())))
+
+    df_recos = scores2recommendations(scores, test_fold_in, 10)
+
+    ndcg = calculate_ndcg(df_recos, 10, df_test_out)
+    recall = calculate_calibrated_recall(df_recos, 10, df_test_out)
+    ndcg5 += ndcg
+    recall5 += recall
+
+    # print(df_recos.head(10))
+    print(f"  NDCG@10: {ndcg:.5f}")
+    print(f"Recall@10: {recall:.5f}")
+
+
 
 ndcg1 /= iterations
 recall1 /= iterations
@@ -311,18 +357,25 @@ ndcg2 /= iterations
 recall2 /= iterations
 ndcg3 /= iterations
 recall3 /= iterations
+ndcg4 /= iterations
+recall4 /= iterations
+ndcg5 /= iterations
+recall5 /= iterations
 
 print(f"RESULTS:\n")
 
+print("Normal ItemKNN")
 print(f"  NDCG@10: {ndcg1:.5f}")
-print(f"Recall@10: {recall1:.5f}")
-print("")
+print(f"Recall@10: {recall1:.5f}\n\n")
+print("Modified ItemKNN")
 print(f"  NDCG@10: {ndcg2:.5f}")
-print(f"Recall@10: {recall2:.5f}")
-print("")
+print(f"Recall@10: {recall2:.5f}\n\n")
+print("Recpack ItemKNN")
 print(f"  NDCG@10: {ndcg3:.5f}")
-print(f"Recall@10: {recall3:.5f}")
-
-
-
-BIG LINK MOMENT: https://www.bcg.com/x/the-multiplier/explaining-negative-sampling-in-recommender-systems
+print(f"Recall@10: {recall3:.5f}\n\n")
+print("Normal SVD")
+print(f"  NDCG@10: {ndcg4:.5f}")
+print(f"Recall@10: {recall4:.5f}\n\n")
+print("Modified SVD")
+print(f"  NDCG@10: {ndcg5:.5f}")
+print(f"Recall@10: {recall5:.5f}\n\n")
