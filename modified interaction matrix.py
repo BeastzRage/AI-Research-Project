@@ -6,11 +6,11 @@ from scipy.sparse import csr_matrix, lil_matrix, coo_array, coo_matrix
 from recpack.util import get_top_K_ranks
 from recpack.matrix import InteractionMatrix
 from recpack.scenarios import StrongGeneralization
-from metrics import calculate_ndcg, calculate_calibrated_recall
+from src.metrics import calculate_ndcg, calculate_calibrated_recall
 from tqdm import tqdm
 import warnings
 
-from SVD import SVD
+from src.SVD import SVD
 
 # noinspection PyUnresolvedReferences
 def my_cosine_similarity(X: csr_matrix) -> csr_matrix:
@@ -140,7 +140,7 @@ class StrongGeneralizationSplitter:
         hold_out_lil = lil_matrix((interaction_matrix_csr.shape[0], interaction_matrix_csr.shape[1]))
 
         # Iterate over each row (user)
-        for i in tqdm(range(lil.shape[0]), desc="Splitting interactions: "):
+        for i in range(lil.shape[0]):
             # Get the non-zero entries in this row
             row_data = lil.data[i]
             row_indices = lil.rows[i]
@@ -204,7 +204,12 @@ interaction_matrix_csr = csr_matrix((data, (rows, cols)), shape=(num_users, num_
 data = np.where(user_reviews['recommend'].values, 1, -1).astype(np.int8)
 modified_interaction_matrix_csr = csr_matrix((data, (rows, cols)), shape=(num_users, num_items))
 
-
+# from src.DataPreprocessor import DataPreprocessor
+#
+# data_preprocessor = DataPreprocessor()
+# new_to_old_user_id_mapping, new_to_old_item_id_mapping = data_preprocessor.map_ids(user_reviews)
+# interaction_matrix_csr = data_preprocessor.to_interaction_matrix(user_reviews)
+# modified_interaction_matrix_csr = data_preprocessor.to_modified_interaction_matrix(user_reviews, -1)
 
 
 from recpack.util import get_top_K_values
@@ -218,7 +223,10 @@ def item_knn_scores(
     # hint: use your own cosine similarity function
     # hint: use `get_top_K_values` to prune the similarity matrix
     # hint: think about how you can calculate the scores for all pairs at once
+    import warnings
+    from scipy.sparse import SparseEfficiencyWarning
 
+    warnings.simplefilter("ignore", SparseEfficiencyWarning)
     cos_sim = my_cosine_similarity(X_train)
     cos_sim = get_top_K_values(cos_sim, neighbor_count)
 
@@ -233,6 +241,15 @@ interaction_matrix_csr, updated_item_id_mapping = MinUsersPerItem(interaction_ma
 modified_interaction_matrix_csr, updated_user_id_mapping_modified = MinItemsPerUser(modified_interaction_matrix_csr, new_to_old_user_id_mapping, 5)
 modified_interaction_matrix_csr, updated_item_id_mapping_modified = MinUsersPerItem(modified_interaction_matrix_csr, new_to_old_item_id_mapping, 5)
 
+# from src.NCoreFilter import NCoreFilter
+#
+# fiveCoreFilter = NCoreFilter(5)
+# interaction_matrix_csr, updated_item_id_mapping, updated_user_id_mapping = fiveCoreFilter.filter(
+#     interaction_matrix_csr, new_to_old_item_id_mapping, new_to_old_user_id_mapping)
+# modified_interaction_matrix_csr, updated_item_id_mapping_modified, updated_user_id_mapping_modified = fiveCoreFilter.filter(
+#     modified_interaction_matrix_csr, new_to_old_item_id_mapping, new_to_old_user_id_mapping)
+
+
 splitter = StrongGeneralizationSplitter()
 ndcg1 = 0
 recall1 = 0
@@ -244,110 +261,64 @@ ndcg4 = 0
 recall4 = 0
 ndcg5 = 0
 recall5 = 0
-iterations = 100
-for i in range(iterations):
+iterations = 1000
+for i in tqdm(range(iterations), desc="Iterations: "):
 
     train, (val_fold_in, val_hold_out), (test_fold_in, test_hold_out), (train_users, val_users, test_users) = splitter.split(interaction_matrix_csr)
-
-
-    scores = item_knn_scores(train, test_fold_in, 50)
-    df_recos = scores2recommendations(scores, test_fold_in, 10)
 
     # dataframe version of hold-out set to compute metrics
     df_test_out = matrix2df(test_hold_out)
 
-    ndcg = calculate_ndcg(df_recos, 10, df_test_out)
-    recall = calculate_calibrated_recall(df_recos, 10, df_test_out)
+    scores = item_knn_scores(train, test_fold_in, 20)
+    df_recos = scores2recommendations(scores, test_fold_in, 20)
+
+
+
+    ndcg = calculate_ndcg(df_recos, 20, df_test_out)
+    recall = calculate_calibrated_recall(df_recos, 20, df_test_out)
     ndcg1 += ndcg
     recall1 += recall
 
-    # print(df_recos.head(10))
-    print(f"  NDCG@10: {ndcg:.5f}")
-    print(f"Recall@10: {recall:.5f}")
-
-    train, (val_fold_in, val_hold_out), (test_fold_in, test_hold_out), (train_users, val_users, test_users) = splitter.split(modified_interaction_matrix_csr)
-
-    df_test_out = matrix2df(test_hold_out)
-
-    scores = item_knn_scores(train, test_fold_in, 50)
-    df_recos = scores2recommendations(scores, test_fold_in, 10)
-
-    ndcg = calculate_ndcg(df_recos, 10, df_test_out)
-    recall = calculate_calibrated_recall(df_recos, 10, df_test_out)
-    ndcg2 += ndcg
-    recall2 += recall
-
-    # print(df_recos.head(10))
-    print(f"  NDCG@10: {ndcg:.5f}")
-    print(f"Recall@10: {recall:.5f}")
-
-    # create a Recpack interaction matrix
-    X = InteractionMatrix.from_csr_matrix(interaction_matrix_csr)
-
-    # split matrix using strong generalization
-    # we use a fixed seed for reproducibility
-    scenario = StrongGeneralization(frac_users_train=0.8, frac_interactions_in=0.8, validation=False)
-    scenario.split(X)
-
-    # get interaction matrices
-    X_train = scenario.full_training_data.values
-    X_test_in = scenario.test_data_in.values
-    X_test_out = scenario.test_data_out.values
-
-    # dataframe version of hold-out set to compute metrics later on
-    df_test_out = matrix2df(X_test_out)
-
-    scores = item_knn_scores(X_train, X_test_in, 50)
-    df_recos = scores2recommendations(scores, X_test_in, 10)
-
-    ndcg = calculate_ndcg(df_recos, 10, df_test_out)
-    recall = calculate_calibrated_recall(df_recos, 10, df_test_out)
-    ndcg3 += ndcg
-    recall3 += recall
-
-    # print(df_recos.head(10))
-    print(f"  NDCG@10: {ndcg:.5f}")
-    print(f"Recall@10: {recall:.5f}\n\n")
 
 
-    train, (val_fold_in, val_hold_out), (test_fold_in, test_hold_out), (train_users, val_users, test_users) = splitter.split(interaction_matrix_csr)
+    # mf = SVD(pd.DataFrame(train.toarray()))
+    #
+    # scores = csr_matrix(mf.get_scores(pd.DataFrame(test_fold_in.toarray())))
+    #
+    # df_recos = scores2recommendations(scores, test_fold_in, 10)
+    #
+    # ndcg = calculate_ndcg(df_recos, 10, df_test_out)
+    # recall = calculate_calibrated_recall(df_recos, 10, df_test_out)
+    # ndcg4 += ndcg
+    # recall4 += recall
+    #
+    #
+    #
+    # train, (val_fold_in, val_hold_out), (test_fold_in, test_hold_out), (train_users, val_users, test_users) = splitter.split(modified_interaction_matrix_csr)
+    #
+    # df_test_out = matrix2df(test_hold_out)
+    #
+    # scores = item_knn_scores(train, test_fold_in, 50)
+    # df_recos = scores2recommendations(scores, test_fold_in, 10)
+    #
+    # ndcg = calculate_ndcg(df_recos, 10, df_test_out)
+    # recall = calculate_calibrated_recall(df_recos, 10, df_test_out)
+    # ndcg2 += ndcg
+    # recall2 += recall
+    #
+    #
+    #
+    # mf = SVD(pd.DataFrame(train.toarray()))
+    #
+    # scores = csr_matrix(mf.get_scores(pd.DataFrame(test_fold_in.toarray())))
+    #
+    # df_recos = scores2recommendations(scores, test_fold_in, 10)
+    #
+    # ndcg = calculate_ndcg(df_recos, 10, df_test_out)
+    # recall = calculate_calibrated_recall(df_recos, 10, df_test_out)
+    # ndcg5 += ndcg
+    # recall5 += recall
 
-    df_test_out = matrix2df(test_hold_out)
-
-    mf = SVD(pd.DataFrame(train.toarray()))
-
-    scores = csr_matrix(mf.get_scores(pd.DataFrame(test_fold_in.toarray())))
-
-    df_recos = scores2recommendations(scores, test_fold_in, 10)
-
-    ndcg = calculate_ndcg(df_recos, 10, df_test_out)
-    recall = calculate_calibrated_recall(df_recos, 10, df_test_out)
-    ndcg4 += ndcg
-    recall4 += recall
-
-    # print(df_recos.head(10))
-    print(f"  NDCG@10: {ndcg:.5f}")
-    print(f"Recall@10: {recall:.5f}")
-
-
-    train, (val_fold_in, val_hold_out), (test_fold_in, test_hold_out), (train_users, val_users, test_users) = splitter.split(modified_interaction_matrix_csr)
-
-    df_test_out = matrix2df(test_hold_out)
-
-    mf = SVD(pd.DataFrame(train.toarray()))
-
-    scores = csr_matrix(mf.get_scores(pd.DataFrame(test_fold_in.toarray())))
-
-    df_recos = scores2recommendations(scores, test_fold_in, 10)
-
-    ndcg = calculate_ndcg(df_recos, 10, df_test_out)
-    recall = calculate_calibrated_recall(df_recos, 10, df_test_out)
-    ndcg5 += ndcg
-    recall5 += recall
-
-    # print(df_recos.head(10))
-    print(f"  NDCG@10: {ndcg:.5f}")
-    print(f"Recall@10: {recall:.5f}")
 
 
 
@@ -370,9 +341,6 @@ print(f"Recall@10: {recall1:.5f}\n\n")
 print("Modified ItemKNN")
 print(f"  NDCG@10: {ndcg2:.5f}")
 print(f"Recall@10: {recall2:.5f}\n\n")
-print("Recpack ItemKNN")
-print(f"  NDCG@10: {ndcg3:.5f}")
-print(f"Recall@10: {recall3:.5f}\n\n")
 print("Normal SVD")
 print(f"  NDCG@10: {ndcg4:.5f}")
 print(f"Recall@10: {recall4:.5f}\n\n")
