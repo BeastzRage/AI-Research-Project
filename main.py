@@ -52,10 +52,8 @@ def main():
     user_reviews = pd.read_csv("dataset/user_reviews.csv")
     train_interactions = pd.read_csv("dataset/train_interactions.csv")
 
-    # Step 1: Mark all rows in B as recommended (default True)
+    # Merge train interactions into user reviews with value for 'recommend' = true if item user pair not present in user reviews
     train_interactions = train_interactions.assign(recommend=True)
-
-    # Step 2: Combine A and B
     user_reviews = (
         pd.concat([user_reviews, train_interactions])
         .drop_duplicates(subset=["user_id", "item_id"], keep="first")
@@ -67,61 +65,61 @@ def main():
     modified_interaction_matrix_csr = data_preprocessor.to_modified_interaction_matrix(user_reviews, -1)
 
 
-    fiveCoreFilter = NCoreFilter(5)
-    interaction_matrix_csr, updated_item_id_mapping, updated_user_id_mapping = fiveCoreFilter.filter(
-        interaction_matrix_csr, new_to_old_item_id_mapping, new_to_old_user_id_mapping)
-    modified_interaction_matrix_csr, updated_item_id_mapping_modified, updated_user_id_mapping_modified = fiveCoreFilter.filter(
-        modified_interaction_matrix_csr, new_to_old_item_id_mapping, new_to_old_user_id_mapping)
+    five_core_filter = NCoreFilter(5)
+    interaction_matrix_csr, updated_item_id_mapping, updated_user_id_mapping = five_core_filter.filter(interaction_matrix_csr, new_to_old_item_id_mapping, new_to_old_user_id_mapping)
+    modified_interaction_matrix_csr, updated_item_id_mapping_modified, updated_user_id_mapping_modified = five_core_filter.filter(modified_interaction_matrix_csr, new_to_old_item_id_mapping, new_to_old_user_id_mapping)
 
 
     validation_splitter = StrongGeneralizationSplitter(train_ratio=0.8, val_ratio=0.2, test_ratio=0, fold_in_ratio=0.8)
 
     validation_range = 100
     step_size = 1
+    different_split_test_count = 5
     validation_scores: dict = {}
-    for i in tqdm(range(2), desc="Optimizing hyper parameters"):
-        train, (validation_fold_in, validation_hold_out), _, _ = validation_splitter.split(interaction_matrix_csr)
-        k = 0
-        for j in range(validation_range):
 
-            # dataframe version of hold-out set to compute metrics
-            df_validation_out = matrix2df(validation_hold_out)
+    best_k = None
+    if best_k is None:
+        for i in tqdm(range(different_split_test_count), desc="Optimizing hyper parameters"):
+            train, (validation_fold_in, validation_hold_out), _, _ = validation_splitter.split(interaction_matrix_csr)
+            k = 1
+            for j in range(validation_range):
+                # dataframe version of hold-out set to compute metrics
+                df_validation_out = matrix2df(validation_hold_out)
 
-            # Baseline ItemKNN
-            k += step_size
-            algo = ItemKNN()
-            scores = algo.item_knn_scores(train, validation_fold_in, k)
-            df_recos = scores2recommendations(scores, validation_fold_in, 20)
+                algo = ItemKNN()
+                scores = algo.item_knn_scores(train, validation_fold_in, k)
+                df_recos = scores2recommendations(scores, validation_fold_in, 20)
 
-            ndcg = calculate_ndcg(df_recos, 20, df_validation_out)
-            if k not in validation_scores or validation_scores[k] < ndcg:
-                validation_scores[k] = ndcg
+                ndcg = calculate_ndcg(df_recos, 20, df_validation_out)
+                if k not in validation_scores or validation_scores[k] < ndcg:
+                    validation_scores[k] = ndcg
+                k += step_size
 
-    best_k = max(validation_scores, key=validation_scores.get)
-    print("Best baseline k: ", best_k)
+        best_k = max(validation_scores, key=validation_scores.get)
+        print("Best baseline k: ", best_k)
 
 
-    validation_scores: dict = {}
-    for i in tqdm(range(2), desc="Optimizing hyper parameters"):
-        train, (validation_fold_in, validation_hold_out), _, _ = validation_splitter.split(modified_interaction_matrix_csr)
-        k = 0
-        for j in range(validation_range):
+    best_k_modified = None
+    if best_k_modified is None:
+        validation_scores: dict = {}
+        for i in tqdm(range(different_split_test_count), desc="Optimizing hyper parameters"):
+            train, (validation_fold_in, validation_hold_out), _, _ = validation_splitter.split(modified_interaction_matrix_csr)
+            k = 1
+            for j in range(validation_range):
+                # dataframe version of hold-out set to compute metrics
+                df_validation_out = matrix2df(validation_hold_out)
 
-            # dataframe version of hold-out set to compute metrics
-            df_validation_out = matrix2df(validation_hold_out)
+                algo = ItemKNN()
+                scores = algo.item_knn_scores(train, validation_fold_in, k)
+                df_recos = scores2recommendations(scores, validation_fold_in, 20)
 
-            # Baseline ItemKNN
-            k += step_size
-            algo = ItemKNN()
-            scores = algo.item_knn_scores(train, validation_fold_in, k)
-            df_recos = scores2recommendations(scores, validation_fold_in, 20)
+                ndcg = calculate_ndcg(df_recos, 20, df_validation_out)
+                if k not in validation_scores or validation_scores[k] < ndcg:
+                    validation_scores[k] = ndcg
+                k += step_size
 
-            ndcg = calculate_ndcg(df_recos, 20, df_validation_out)
-            if k not in validation_scores or validation_scores[k] < ndcg:
-                validation_scores[k] = ndcg
-
-    best_k_modified = max(validation_scores, key=validation_scores.get)
-    print("Best modified k: ", best_k_modified)
+        best_k_modified = max(validation_scores, key=validation_scores.get)
+        print("Best modified k: ", best_k_modified)
 
 
 
@@ -197,7 +195,75 @@ def main():
         print(f"{key}:")
         print(f"  NDCG@10: {ndcgScores[key]:.5f}")
         print(f"Recall@10: {recallScores[key]:.5f}\n\n")
-    #
+
+    test_reviews = pd.read_csv("dataset/test_interactions_in.csv")
+
+    # Filter out items not seen in the training set
+    # (ItemKNN cannot score unseen items)
+    old_to_new_item_id_mapping = {v: k for k, v in updated_item_id_mapping.items()}
+    test_reviews = test_reviews[test_reviews['item_id'].isin(old_to_new_item_id_mapping)]
+
+    # Remap user ids
+    user_ids = test_reviews['user_id'].unique()
+    user_id_mapping = {old_id: new_id for new_id, old_id in enumerate(user_ids)}
+    new_to_old_test_user_id_mapping = {v: k for k, v in user_id_mapping.items()}
+    test_reviews['user_id'] = test_reviews['user_id'].map(user_id_mapping)
+
+    # update item ids to correspond to that of the training set
+    test_reviews['item_id'] = test_reviews['item_id'].map(old_to_new_item_id_mapping)
+
+    # Build CSR matrix with full train-set dimensions
+    test_rows = test_reviews['user_id'].values
+    test_cols = test_reviews['item_id'].values
+    test_data = np.ones(len(test_reviews), dtype=np.int8)
+
+    test_fold_in_matrix_csr = csr_matrix(
+        (test_data, (test_rows, test_cols)),
+        shape=(len(test_reviews['user_id'].unique()), interaction_matrix_csr.shape[1])  # <— same as training matrix
+    )
+
+
+
+    # Baseline ItemKNN
+    algo = ItemKNN()
+    scores = algo.item_knn_scores(interaction_matrix_csr, test_fold_in_matrix_csr, best_k)
+    df_recos = scores2recommendations(scores, test_fold_in_matrix_csr, 20)
+
+
+    df_recos = df_recos.drop('rank', axis=1)
+
+    for id in df_recos['user_id'].unique().tolist():
+        if id not in new_to_old_test_user_id_mapping:
+            raise ValueError("User id not found in user-id mapping")
+    for id in df_recos['item_id'].unique().tolist():
+        if id not in updated_item_id_mapping:
+            raise ValueError("Item id not found in item id mapping")
+
+    df_recos['user_id'] = df_recos['user_id'].replace(new_to_old_test_user_id_mapping)
+    df_recos['item_id'] = df_recos['item_id'].replace(updated_item_id_mapping)
+    df_recos.to_csv("recommendation_results/baseline_recommendations.csv", index=False)
+
+
+    # modified interaction matrix ItemKNN
+    algo = ItemKNN()
+    scores = algo.item_knn_scores(modified_interaction_matrix_csr, test_fold_in_matrix_csr, best_k_modified)
+    df_recos = scores2recommendations(scores, test_fold_in_matrix_csr, 20)
+
+
+    df_recos = df_recos.drop('rank', axis=1)
+    for id in df_recos['user_id'].unique().tolist():
+        if id not in new_to_old_test_user_id_mapping:
+            raise ValueError("User id not found in user-id mapping")
+    for id in df_recos['item_id'].unique().tolist():
+        if id not in updated_item_id_mapping_modified:
+            raise ValueError("Item id not found in item id mapping")
+
+    df_recos['user_id'] = df_recos['user_id'].replace(new_to_old_test_user_id_mapping)
+    df_recos['item_id'] = df_recos['item_id'].replace(updated_item_id_mapping_modified)
+    df_recos.to_csv("recommendation_results/modified_matrix_recommendations.csv", index=False)
+
+
+
     # print("iteration 0")
     # i = 0
     # while True:

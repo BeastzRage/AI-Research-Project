@@ -21,7 +21,7 @@ class NCoreFilter:
         filtered_interaction_matrix = interaction_matrix_csr[:, item_mask]
 
         # Update the mapping
-        item_ids = np.array(list(item_mapping.keys()))
+        item_ids = np.array(list(item_mapping.values()))
         good_item_ids = item_ids[item_mask]
         updated_item_mapping = {new_id: old_id for new_id, old_id in enumerate(good_item_ids)}
 
@@ -35,7 +35,7 @@ class NCoreFilter:
         filtered_interaction_matrix = interaction_matrix_csr[user_mask]
 
         # Update the mapping
-        user_ids = np.array(list(user_mapping.keys()))
+        user_ids = np.array(list(user_mapping.values()))
         good_user_ids = user_ids[user_mask]
         updated_user_mapping = {new_id: old_id for new_id, old_id in enumerate(good_user_ids)}
 

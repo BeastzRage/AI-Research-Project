@@ -1,4 +1,4 @@
-# AI-Research-Project
+# AI-Research-Project Marouan El Marnissi
 
 1. **Environment Setup**:
     - Ensure you have Python installed on your machine.
