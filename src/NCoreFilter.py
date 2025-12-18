@@ -4,7 +4,7 @@ from scipy.sparse import csr_matrix
 class NCoreFilter:
 
     def __init__(self, N = 5):
-        # assert N > 0, "N must be greater than 0."
+        assert N > 0, "N must be greater than 0."
         self.N = N
 
 
