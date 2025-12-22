@@ -30,6 +30,9 @@ class StrongGeneralizationSplitter:
             val_hold_out scipy.sparse.csr_matrix validation hold out data matrix
             test_fold_in scipy.sparse.csr_matrix test fold in data matrix
             test_hold_out scipy.sparse.csr_matrix test hold out data matrix
+            train_users list of users indexes in the train split
+            val_users list of users indexes in the validation split
+            test_users list of users indexes in the test split
         """
 
         num_users, num_items = interaction_matrix_csr.shape
@@ -54,7 +57,7 @@ class StrongGeneralizationSplitter:
         val_fold_in, val_hold_out = self.split_interactions(val_matrix)
         test_fold_in, test_hold_out = self.split_interactions(test_matrix)
 
-        return train_matrix, (val_fold_in, val_hold_out), (test_fold_in, test_hold_out)
+        return train_matrix, (val_fold_in, val_hold_out), (test_fold_in, test_hold_out), (train_users, val_users, test_users)
 
     def split_interactions(self, interaction_matrix_csr):
         """

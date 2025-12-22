@@ -107,6 +107,8 @@ class DataPreprocessor:
         :param train_item_id_mapping: dict mapping new item IDs to old item IDs for the items in the training set.
         :return: scipy.sparse.csr_matrix containing the test fold in user-item interactions.
         """
+        assert 'user_id' in test_reviews.columns, "dataframe must contain 'user_id' column"
+        assert 'item_id' in test_reviews.columns, "dataframe must contain 'item_id' column"
 
         # Filter out items not seen in the training set
         old_to_new_item_id_mapping = {v: k for k, v in train_item_id_mapping.items()}

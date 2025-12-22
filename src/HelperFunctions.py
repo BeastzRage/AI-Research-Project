@@ -76,7 +76,7 @@ def average_accuracy(interaction_matrix_csr, k):
 
     for i in tqdm(range(iterations), desc="calculating average NDCG@20 and Recall@20"):
 
-        train, _, (test_fold_in, test_hold_out) = test_splitter.split(interaction_matrix_csr)
+        train, _, (test_fold_in, test_hold_out), _ = test_splitter.split(interaction_matrix_csr)
 
         # dataframe version of hold-out set to compute metrics
         df_test_out = matrix2df(test_hold_out)

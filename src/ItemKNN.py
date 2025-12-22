@@ -89,7 +89,7 @@ class ItemKNN:
                                                            test_ratio=0, fold_in_ratio=fold_in_ratio)
         validation_scores: dict = {}
         for i in tqdm(range(split_count), desc="Tuning neighborhood size k"):
-            train, (validation_fold_in, validation_hold_out), _ = validation_splitter.split(interaction_matrix_csr)
+            train, (validation_fold_in, validation_hold_out), _, _ = validation_splitter.split(interaction_matrix_csr)
             k = 1
             for j in range(validation_range):
                 # dataframe version of hold-out set to compute metrics
