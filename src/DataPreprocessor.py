@@ -25,6 +25,7 @@ class DataPreprocessor:
 
 
     def to_interaction_matrix(self, interaction_data: pd.DataFrame) -> csr_matrix:
+        interaction_data = interaction_data.drop_duplicates(subset=['user_id', 'item_id'])
         num_users = len(interaction_data['old_user_id'].unique())
         num_items = len(interaction_data['old_item_id'].unique())
 
@@ -38,6 +39,7 @@ class DataPreprocessor:
     def to_modified_interaction_matrix(self, interaction_data: pd.DataFrame, negative_interaction_value: float=-1) -> csr_matrix:
         assert 'recommend' in interaction_data.columns, "dataframe must contain 'recommend' column"
 
+        interaction_data = interaction_data.drop_duplicates(subset=['user_id', 'item_id'])
         num_users = len(interaction_data['old_user_id'].unique())
         num_items = len(interaction_data['old_item_id'].unique())
 
