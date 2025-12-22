@@ -25,3 +25,5 @@ try:
     raise AssertionError("Should have raised an exception")
 except AssertionError as e:
     assert str(e) == "N must be greater than 0."
+except Exception as e:
+    raise e
