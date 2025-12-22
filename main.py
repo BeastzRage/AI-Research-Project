@@ -60,14 +60,14 @@ def main():
 
     print("generating recommendations... [DONE]")
 
-    # print("Running offline accuracy test...", end='\r')
-    #
-    # ndcg, recall = average_accuracy(interaction_matrix_csr, best_k)
-    # print("Average accuracy score:")
-    # print(f"  NDCG@20: {ndcg:.5f}")
-    # print(f"Recall@20: {recall:.5f}\n\n")
-    #
-    # print("Running offline accuracy test... [DONE]")
+    print("Running local accuracy test...")
+
+    ndcg, recall = average_accuracy(interaction_matrix_csr, best_k)
+    print("Average accuracy score:")
+    print(f"  NDCG@20: {ndcg:.5f}")
+    print(f"Recall@20: {recall:.5f}\n\n")
+
+    print("Running local accuracy test... [DONE]")
 
 if __name__ == "__main__":
     main()
